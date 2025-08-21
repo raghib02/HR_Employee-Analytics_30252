@@ -1,0 +1,68 @@
+# backend.py
+
+# --- Database Connection Parameters ---
+# Best practice: Store sensitive data like this in environment variables
+# For simplicity in this example, we define it here.
+DB_PARAMS = {
+    "database": os.getenv("DB_NAME", "HRM"),
+    "user": os.getenv("DB_USER", "postgres"),
+    "password": os.getenv("DB_PASSWORD", "4852"),
+    "host": os.getenv("DB_HOST", "localhost"),
+    "port": os.getenv("DB_PORT", "5432")
+}
+
+class Database:
+    def __init__(self):
+        """Initializes the Database object and connects to PostgreSQL."""
+        try:
+            # The connection uses the DB_PARAMS defined within this file.
+            self.conn = psycopg2.connect(**DB_PARAMS)
+            self.cur = self.conn.cursor()
+        except psycopg2.OperationalError as e:
+            # Provide a more user-friendly error message for the frontend to catch
+            raise ConnectionError(f"Error connecting to the database: {e}") from e
+
+    def disconnect(self):
+        """Closes the database connection."""
+        if self.conn:
+            self.cur.close()
+            self.conn.close()
+
+    # --- READ Operations ---
+    def get_all_employees(self, sort_by='employee_id', order='ASC'):
+        """Fetches all employees, with optional sorting."""
+        query = f"SELECT employee_id, first_name, last_name, department, hire_date, salary FROM employees ORDER BY {sort_by} {order};"
+        self.cur.execute(query)
+        return self.cur.fetchall()
+
+    def get_employees_by_department(self, department, sort_by='employee_id', order='ASC'):
+        """Fetches employees filtered by a specific department, with optional sorting."""
+        query = f"SELECT employee_id, first_name, last_name, department, hire_date, salary FROM employees WHERE department = %s ORDER BY {sort_by} {order};"
+        self.cur.execute(query, (department,))
+        return self.cur.fetchall()
+
+    def get_distinct_departments(self):
+        """Fetches a list of unique department names."""
+        self.cur.execute("SELECT DISTINCT department FROM employees ORDER BY department;")
+        return [item[0] for item in self.cur.fetchall()]
+
+    # --- AGGREGATION for Business Insights ---
+    def get_employee_analytics(self):
+        """Calculates and returns key analytics about employees."""
+        self.cur.execute("SELECT COUNT(*), SUM(salary), AVG(salary), MIN(salary), MAX(salary) FROM employees;")
+        stats = self.cur.fetchone()
+        
+        if stats is None or stats[0] == 0:
+            return {
+                'total_employees': 0, 'total_salary_expense': 0,
+                'average_salary': 0, 'min_salary': 0, 'max_salary': 0
+            }
+
+        return {
+            'total_employees': stats[0], 'total_salary_expense': stats[1],
+            'average_salary': stats[2], 'min_salary': stats[3], 'max_salary': stats[4]
+        }
+
+    def __del__(self):
+        """Destructor to ensure disconnection when the object is destroyed."""
+        self.disconnect()
