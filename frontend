@@ -1,0 +1,66 @@
+# frontend.py
+
+--
+
+st.set_page_config(
+    page_title="Urban Asset Tracker",
+    page_icon="🏢",
+    layout="wide",
+)
+
+st.title("📊 Urban Asset Tracker: Employee Analytics")
+st.markdown("A tool for the HR department to view employee data and gain quick insights.")
+
+# --- Database Connection ---
+# The frontend now has no knowledge of DB credentials.
+# It simply creates an instance of the Database class from the backend.
+try:
+    db = Database()
+except ConnectionError as e:
+    st.error(f"Failed to connect to the database. Please check the backend configuration. Details: {e}")
+    st.stop() # Stop the app if connection fails
+
+# --- Sidebar for Filters and Sorting ---
+st.sidebar.header("Filter and Sort Options")
+
+departments = ["All"] + db.get_distinct_departments()
+selected_department = st.sidebar.selectbox("Filter by Department:", departments)
+
+sort_options = {
+    "Salary (High to Low)": ("salary", "DESC"),
+    "Hire Date (Newest First)": ("hire_date", "DESC"),
+    "First Name (A-Z)": ("first_name", "ASC"),
+    "Last Name (A-Z)": ("last_name", "ASC")
+}
+selected_sort_key = st.sidebar.selectbox("Sort Employees By:", list(sort_options.keys()))
+sort_by, sort_order = sort_options[selected_sort_key]
+
+# --- Main Content ---
+
+# Business Insights Section
+st.header("Key Business Insights")
+stats = db.get_employee_analytics()
+
+col1, col2, col3, col4, col5 = st.columns(5)
+col1.metric(label="Total Employees", value=stats['total_employees'])
+col2.metric(label="Total Monthly Salary", value=f"${stats['total_salary_expense']:,.2f}")
+col3.metric(label="Average Salary", value=f"${stats['average_salary']:,.2f}")
+col4.metric(label="Highest Salary", value=f"${stats['max_salary']:,.2f}")
+col5.metric(label="Lowest Salary", value=f"${stats['min_salary']:,.2f}")
+
+# Employee Data Section
+st.header("Employee Directory")
+
+if selected_department == "All":
+    employee_data = db.get_all_employees(sort_by=sort_by, order=sort_order)
+else:
+    employee_data = db.get_employees_by_department(selected_department, sort_by=sort_by, order=sort_order)
+
+if employee_data:
+    df = pd.DataFrame(employee_data, columns=["Employee ID", "First Name", "Last Name", "Department", "Hire Date", "Salary"])
+    df['Salary'] = df['Salary'].apply(lambda x: f"${x:,.2f}")
+    st.dataframe(df, use_container_width=True)
+else:
+    st.info("No employee data to display for the selected criteria.")
+
+# The database connection will be closed automatically when the 'db' object is destroyed.
